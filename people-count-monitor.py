@@ -11,11 +11,33 @@ from datetime import datetime
 import logging
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
+from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QVBoxLayout, QWidget
+from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtGui import QImage, QPixmap
 
 # ANSI escape codes for colors
 GREEN = '\033[92m'
 RED = '\033[91m'
 RESET = '\033[0m'
+
+class VideoWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Live Video Feed")
+        self.central_widget = QWidget()
+        self.setCentralWidget(self.central_widget)
+        self.layout = QVBoxLayout(self.central_widget)
+        self.label = QLabel()
+        self.layout.addWidget(self.label)
+        self.resize(800, 600)
+        
+    def update_frame(self, frame):
+        height, width, channel = frame.shape
+        bytes_per_line = 3 * width
+        q_image = QImage(frame.data, width, height, bytes_per_line, QImage.Format_RGB888)
+        pixmap = QPixmap.fromImage(q_image)
+        scaled_pixmap = pixmap.scaled(self.label.size(), Qt.KeepAspectRatio)
+        self.label.setPixmap(scaled_pixmap)
 
 class PeopleMonitor:
     def __init__(self, 
@@ -27,7 +49,7 @@ class PeopleMonitor:
                  min_people=2, 
                  check_interval=300,
                  log_dir='./monitoring_logs',
-                 display_method='print'):
+                 display_method='qt'):
         # Setup logging
         os.makedirs(log_dir, exist_ok=True)
         logging.basicConfig(
@@ -63,6 +85,12 @@ class PeopleMonitor:
         # Video recording setup
         self.video_writer = None
         self.current_video_path = None
+        
+        # Qt window setup
+        if self.display_method == 'qt':
+            self.app = QApplication.instance() or QApplication(sys.argv)
+            self.window = VideoWindow()
+            self.window.show()
 
     def send_slack_alert(self, message):
         try:
@@ -133,10 +161,10 @@ class PeopleMonitor:
 
     def display_frame(self, frame, people_count):
         try:
-            # Clear the previous line
+            # Clear the previous line in terminal
             sys.stdout.write('\033[F\033[K')
             
-            # Print colored status
+            # Print colored status in terminal
             if people_count >= self.min_people:
                 status = f"{GREEN}✓ {people_count} people detected (Meeting minimum requirement of {self.min_people}){RESET}"
             else:
@@ -144,6 +172,14 @@ class PeopleMonitor:
             
             print(status)
             sys.stdout.flush()
+            
+            # Update Qt window if using qt display method
+            if self.display_method == 'qt':
+                # Convert BGR to RGB for Qt
+                rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                self.window.update_frame(rgb_frame)
+                self.app.processEvents()  # Process Qt events
+                
             return True
                 
         except Exception as e:
@@ -179,13 +215,19 @@ class PeopleMonitor:
                 people_count = len(people)
                 
                 # Draw bounding boxes
+                frame_with_boxes = frame.copy()
                 for box in people:
                     x1, y1, x2, y2 = map(int, box.xyxy[0])
                     color = (0, 0, 255) if people_count < self.min_people else (0, 255, 0)
-                    cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+                    cv2.rectangle(frame_with_boxes, (x1, y1), (x2, y2), color, 2)
+                
+                # Add text overlay
+                text_color = (0, 0, 255) if people_count < self.min_people else (0, 255, 0)
+                cv2.putText(frame_with_boxes, f'People: {people_count}', (10, 30),
+                           cv2.FONT_HERSHEY_SIMPLEX, 1, text_color, 2)
                 
                 # Display the frame and status
-                self.display_frame(frame, people_count)
+                self.display_frame(frame_with_boxes, people_count)
                 
                 current_time = time.time()
                 
@@ -197,7 +239,7 @@ class PeopleMonitor:
                     
                     if self.video_writer is not None:
                         try:
-                            self.video_writer.write(frame)
+                            self.video_writer.write(frame_with_boxes)  # Save frame with boxes
                         except Exception as e:
                             self.logger.error(f"Error writing video frame: {e}")
                     
@@ -239,6 +281,9 @@ class PeopleMonitor:
         if hasattr(self, 'cap') and self.cap is not None:
             self.cap.release()
         self.stop_video_recording()
+        # Close Qt window if it exists
+        if hasattr(self, 'window'):
+            self.window.close()
 
 if __name__ == "__main__":
     monitor = PeopleMonitor(
@@ -248,7 +293,7 @@ if __name__ == "__main__":
         email_password='your_app_password',
         email_recipient='wyantethan@gmail.com',
         min_people=2,
-        display_method='print'
+        display_method='qt'
     )
     
     try:
