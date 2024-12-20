@@ -83,8 +83,10 @@ class PeopleMonitor:
         self.display_method = display_method
         
         # Video recording setup
-        self.video_writer = None
-        self.current_video_path = None
+        self.incident_video_writer = None
+        self.continuous_video_writer = None
+        self.current_incident_video_path = None
+        self.current_continuous_video_path = None
         
         # Qt window setup
         if self.display_method == 'qt':
@@ -117,16 +119,16 @@ class PeopleMonitor:
         except Exception as e:
             self.logger.error(f"Failed to send email: {e}")
 
-    def start_video_recording(self):
+    def start_continuous_recording(self):
         try:
-            # Stop any existing recording
-            self.stop_video_recording()
+            # Stop any existing continuous recording
+            self.stop_continuous_recording()
             
             # Create a new video file with timestamp
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            self.current_video_path = os.path.join(
+            self.current_continuous_video_path = os.path.join(
                 self.log_dir, 
-                f'security_recording_{timestamp}.mp4'  # Using mp4 instead of avi
+                f'continuous_recording_{timestamp}.mp4'
             )
             
             # Get camera properties from the main capture
@@ -135,29 +137,71 @@ class PeopleMonitor:
             
             # Initialize video writer with H264 codec
             fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-            self.video_writer = cv2.VideoWriter(
-                self.current_video_path, 
+            self.continuous_video_writer = cv2.VideoWriter(
+                self.current_continuous_video_path, 
                 fourcc, 
-                10.0,  # Lower framerate for better performance
+                10.0,
                 (width, height)
             )
             
-            self.logger.info(f"Started video recording: {self.current_video_path}")
+            self.logger.info(f"Started continuous recording: {self.current_continuous_video_path}")
         except Exception as e:
-            self.logger.error(f"Error starting video recording: {e}")
-            self.video_writer = None
+            self.logger.error(f"Error starting continuous recording: {e}")
+            self.continuous_video_writer = None
 
-    def stop_video_recording(self):
+    def stop_continuous_recording(self):
         try:
-            if self.video_writer is not None:
-                self.video_writer.release()
-                self.logger.info(f"Stopped video recording: {self.current_video_path}")
-                self.video_writer = None
-                self.current_video_path = None
+            if self.continuous_video_writer is not None:
+                self.continuous_video_writer.release()
+                self.logger.info(f"Stopped continuous recording: {self.current_continuous_video_path}")
+                self.continuous_video_writer = None
+                self.current_continuous_video_path = None
         except Exception as e:
-            self.logger.error(f"Error stopping video recording: {e}")
-            self.video_writer = None
-            self.current_video_path = None
+            self.logger.error(f"Error stopping continuous recording: {e}")
+            self.continuous_video_writer = None
+            self.current_continuous_video_path = None
+
+    def start_incident_recording(self):
+        try:
+            # Stop any existing incident recording
+            self.stop_incident_recording()
+            
+            # Create a new video file with timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            self.current_incident_video_path = os.path.join(
+                self.log_dir, 
+                f'incident_recording_{timestamp}.mp4'
+            )
+            
+            # Get camera properties from the main capture
+            width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            
+            # Initialize video writer with H264 codec
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            self.incident_video_writer = cv2.VideoWriter(
+                self.current_incident_video_path, 
+                fourcc, 
+                10.0,
+                (width, height)
+            )
+            
+            self.logger.info(f"Started incident recording: {self.current_incident_video_path}")
+        except Exception as e:
+            self.logger.error(f"Error starting incident recording: {e}")
+            self.incident_video_writer = None
+
+    def stop_incident_recording(self):
+        try:
+            if self.incident_video_writer is not None:
+                self.incident_video_writer.release()
+                self.logger.info(f"Stopped incident recording: {self.current_incident_video_path}")
+                self.incident_video_writer = None
+                self.current_incident_video_path = None
+        except Exception as e:
+            self.logger.error(f"Error stopping incident recording: {e}")
+            self.incident_video_writer = None
+            self.current_incident_video_path = None
 
     def display_frame(self, frame, people_count):
         try:
@@ -196,10 +240,13 @@ class PeopleMonitor:
                 self.logger.error("Error: Could not open camera.")
                 return
 
-            recording_started = False
+            incident_recording_started = False
             print("\n")  # Add initial newline for status updates
             last_alert_time = 0
             alert_interval = 5  # Minimum seconds between alerts
+            
+            # Start continuous recording immediately
+            self.start_continuous_recording()
             
             while self.monitoring:
                 ret, frame = self.cap.read()
@@ -229,19 +276,26 @@ class PeopleMonitor:
                 # Display the frame and status
                 self.display_frame(frame_with_boxes, people_count)
                 
+                # Always write to continuous recording
+                if self.continuous_video_writer is not None:
+                    try:
+                        self.continuous_video_writer.write(frame_with_boxes)
+                    except Exception as e:
+                        self.logger.error(f"Error writing continuous video frame: {e}")
+                
                 current_time = time.time()
                 
-                # Handle recording if fewer than minimum people
+                # Handle incident recording if fewer than minimum people
                 if people_count < self.min_people:
-                    if not recording_started:
-                        self.start_video_recording()
-                        recording_started = True
+                    if not incident_recording_started:
+                        self.start_incident_recording()
+                        incident_recording_started = True
                     
-                    if self.video_writer is not None:
+                    if self.incident_video_writer is not None:
                         try:
-                            self.video_writer.write(frame_with_boxes)  # Save frame with boxes
+                            self.incident_video_writer.write(frame_with_boxes)
                         except Exception as e:
-                            self.logger.error(f"Error writing video frame: {e}")
+                            self.logger.error(f"Error writing incident video frame: {e}")
                     
                     # Only log alerts at the specified interval
                     if current_time - last_alert_time >= alert_interval:
@@ -249,14 +303,15 @@ class PeopleMonitor:
                         self.logger.warning(alert_message)
                         last_alert_time = current_time
                 else:
-                    if recording_started:
-                        self.stop_video_recording()
-                        recording_started = False
+                    if incident_recording_started:
+                        self.stop_incident_recording()
+                        incident_recording_started = False
                 
                 time.sleep(0.05)  # Reduced sleep time for smoother operation
             
             # Cleanup
-            self.stop_video_recording()
+            self.stop_incident_recording()
+            self.stop_continuous_recording()
             if self.cap is not None:
                 self.cap.release()
         
@@ -267,7 +322,8 @@ class PeopleMonitor:
             # Ensure cleanup happens
             if hasattr(self, 'cap') and self.cap is not None:
                 self.cap.release()
-            self.stop_video_recording()
+            self.stop_incident_recording()
+            self.stop_continuous_recording()
 
     def start_monitoring(self):
         self.monitoring = True
@@ -280,7 +336,8 @@ class PeopleMonitor:
         # Ensure cleanup happens
         if hasattr(self, 'cap') and self.cap is not None:
             self.cap.release()
-        self.stop_video_recording()
+        self.stop_incident_recording()
+        self.stop_continuous_recording()
         # Close Qt window if it exists
         if hasattr(self, 'window'):
             self.window.close()
