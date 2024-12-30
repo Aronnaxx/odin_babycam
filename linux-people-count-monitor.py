@@ -14,6 +14,9 @@ from slack_sdk.errors import SlackApiError
 from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QVBoxLayout, QWidget
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QImage, QPixmap
+import board
+import neopixel
+from adafruit_circuitplayground import cp
 
 # ANSI escape codes for colors
 GREEN = '\033[92m'
@@ -102,6 +105,14 @@ class PeopleMonitor:
             self.app = QApplication.instance() or QApplication(sys.argv)
             self.window = VideoWindow()
             self.window.show()
+            
+        # Circuit Playground Express setup
+        try:
+            self.cp = cp
+            self.logger.info("Successfully connected to Circuit Playground Express")
+        except Exception as e:
+            self.logger.error(f"Failed to initialize Circuit Playground Express: {e}")
+            self.cp = None
 
     def send_slack_alert(self, message):
         try:
@@ -199,6 +210,23 @@ class PeopleMonitor:
             sys.stdout.flush()
             return True
 
+    def update_leds(self, people_count):
+        """Update the LEDs based on the number of people detected."""
+        if self.cp is None:
+            return
+            
+        try:
+            if people_count < self.min_people:
+                # Red alert - turn all LEDs red
+                for i in range(10):  # Circuit Playground has 10 LEDs
+                    self.cp.pixels[i] = (255, 0, 0)  # Red
+            else:
+                # All clear - turn all LEDs green
+                for i in range(10):
+                    self.cp.pixels[i] = (0, 255, 0)  # Green
+        except Exception as e:
+            self.logger.error(f"Failed to update LEDs: {e}")
+
     def detect_and_display_people(self):
         try:
             camera_index = find_available_camera()
@@ -226,6 +254,9 @@ class PeopleMonitor:
                 # Filter only person class (class 0 is person)
                 people = [box for box in results[0].boxes if int(box.cls) == 0]
                 people_count = len(people)
+                
+                # Update LEDs based on people count
+                self.update_leds(people_count)
                 
                 # Draw bounding boxes
                 frame_with_boxes = frame.copy()

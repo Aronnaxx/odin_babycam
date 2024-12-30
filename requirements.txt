@@ -2,6 +2,7 @@
 opencv-python>=4.7.0,<4.8.0
 ultralytics>=8.0.0,<9.0.0
 numpy>=1.22.0,<2.0.0
+torch>=2.0.0
 
 # Slack Integration
 slack-sdk>=3.21.0,<4.0.0
@@ -11,3 +12,6 @@ email-validator>=2.0.0,<3.0.0
 
 # Optional: Environment Variable Management
 python-dotenv>=1.0.0,<2.0.0
+
+# Serial Communication
+pyserial>=3.5

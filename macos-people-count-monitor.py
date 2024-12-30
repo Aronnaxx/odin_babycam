@@ -14,6 +14,10 @@ from slack_sdk.errors import SlackApiError
 from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QVBoxLayout, QWidget
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QImage, QPixmap
+import usb.core
+import usb.util
+import serial
+import serial.tools.list_ports
 
 # ANSI escape codes for colors
 GREEN = '\033[92m'
@@ -93,6 +97,24 @@ class PeopleMonitor:
             self.app = QApplication.instance() or QApplication(sys.argv)
             self.window = VideoWindow()
             self.window.show()
+            
+        # Circuit Playground Express setup for macOS
+        try:
+            # Find Circuit Playground Express device
+            self.serial_port = None
+            for port in serial.tools.list_ports.comports():
+                if "Circuit Playground" in port.description:
+                    self.serial_port = serial.Serial(port.device, 115200, timeout=1)
+                    break
+            
+            if self.serial_port is None:
+                raise Exception("Circuit Playground Express not found")
+                
+            self.logger.info("Successfully connected to Circuit Playground Express")
+            time.sleep(2)  # Wait for serial connection to stabilize
+        except Exception as e:
+            self.logger.error(f"Failed to initialize Circuit Playground Express: {e}")
+            self.serial_port = None
 
     def send_slack_alert(self, message):
         try:
@@ -232,6 +254,22 @@ class PeopleMonitor:
             sys.stdout.flush()
             return True
 
+    def update_leds(self, people_count):
+        """Update the LEDs based on the number of people detected."""
+        if self.serial_port is None:
+            return
+            
+        try:
+            if people_count < self.min_people:
+                # Red alert - turn all LEDs red
+                self.serial_port.write(b'R')  # Send 'R' for red
+            else:
+                # All clear - turn all LEDs green
+                self.serial_port.write(b'G')  # Send 'G' for green
+            self.serial_port.flush()
+        except Exception as e:
+            self.logger.error(f"Failed to update LEDs: {e}")
+
     def detect_and_display_people(self):
         try:
             self.cap = cv2.VideoCapture(0)
@@ -260,6 +298,9 @@ class PeopleMonitor:
                 # Filter only person class (class 0 is person)
                 people = [box for box in results[0].boxes if int(box.cls) == 0]
                 people_count = len(people)
+                
+                # Update LEDs based on people count
+                self.update_leds(people_count)
                 
                 # Draw bounding boxes
                 frame_with_boxes = frame.copy()
@@ -338,6 +379,14 @@ class PeopleMonitor:
             self.cap.release()
         self.stop_incident_recording()
         self.stop_continuous_recording()
+        # Turn off LEDs before closing
+        if self.serial_port is not None:
+            try:
+                self.serial_port.write(b'O')  # Send 'O' for off
+                self.serial_port.flush()
+                self.serial_port.close()
+            except:
+                pass
         # Close Qt window if it exists
         if hasattr(self, 'window'):
             self.window.close()
