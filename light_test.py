@@ -1,10 +1,13 @@
 import time
-from adafruit_circuitplayground import cp
+import board
+import neopixel
+
+# Initialize the NeoPixel strip - Circuit Playground Express has built-in NeoPixels on pin D8
+pixels = neopixel.NeoPixel(board.D8, 10, brightness=0.3)  # 10 pixels, at 30% brightness
 
 def set_all_pixels(color):
     """Set all 10 NeoPixels to the specified color."""
-    for i in range(10):
-        cp.pixels[i] = color
+    pixels.fill(color)
     time.sleep(1)  # Keep the color visible for 1 second
 
 def main():
@@ -28,8 +31,7 @@ def main():
     except KeyboardInterrupt:
         # Turn off all LEDs when exiting
         print("\nTurning off LEDs...")
-        for i in range(10):
-            cp.pixels[i] = (0, 0, 0)
+        pixels.fill((0, 0, 0))
 
 if __name__ == "__main__":
     main() 
