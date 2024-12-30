@@ -11,9 +11,6 @@ from datetime import datetime
 import logging
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
-from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QVBoxLayout, QWidget
-from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtGui import QImage, QPixmap
 import board
 import neopixel
 from adafruit_circuitplayground import cp
@@ -34,25 +31,6 @@ def find_available_camera():
                 return i
     return 0  # Default to 0 if no camera found
 
-class VideoWindow(QMainWindow):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("Live Video Feed")
-        self.central_widget = QWidget()
-        self.setCentralWidget(self.central_widget)
-        self.layout = QVBoxLayout(self.central_widget)
-        self.label = QLabel()
-        self.layout.addWidget(self.label)
-        self.resize(800, 600)
-        
-    def update_frame(self, frame):
-        height, width, channel = frame.shape
-        bytes_per_line = 3 * width
-        q_image = QImage(frame.data, width, height, bytes_per_line, QImage.Format_RGB888)
-        pixmap = QPixmap.fromImage(q_image)
-        scaled_pixmap = pixmap.scaled(self.label.size(), Qt.KeepAspectRatio)
-        self.label.setPixmap(scaled_pixmap)
-
 class PeopleMonitor:
     def __init__(self, 
                  slack_token='your_slack_token',
@@ -62,8 +40,7 @@ class PeopleMonitor:
                  email_recipient='team_lead@example.com', 
                  min_people=2, 
                  check_interval=300,
-                 log_dir='./monitoring_logs',
-                 display_method='qt'):
+                 log_dir='./monitoring_logs'):
         # Setup logging
         os.makedirs(log_dir, exist_ok=True)
         logging.basicConfig(
@@ -94,17 +71,10 @@ class PeopleMonitor:
         self.check_interval = check_interval
         self.monitoring = False
         self.log_dir = log_dir
-        self.display_method = display_method
         
         # Video recording setup
         self.video_writer = None
         self.current_video_path = None
-        
-        # Qt window setup
-        if self.display_method == 'qt':
-            self.app = QApplication.instance() or QApplication(sys.argv)
-            self.window = VideoWindow()
-            self.window.show()
             
         # Circuit Playground Express setup
         try:
@@ -194,14 +164,6 @@ class PeopleMonitor:
             
             print(status)
             sys.stdout.flush()
-            
-            # Update Qt window if using qt display method
-            if self.display_method == 'qt':
-                # Convert BGR to RGB for Qt
-                rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                self.window.update_frame(rgb_frame)
-                self.app.processEvents()  # Process Qt events
-                
             return True
                 
         except Exception as e:
@@ -337,9 +299,6 @@ class PeopleMonitor:
                     self.cp.pixels[i] = (0, 0, 0)  # Turn off all LEDs
             except Exception as e:
                 self.logger.error(f"Failed to turn off LEDs during cleanup: {e}")
-        # Close Qt window if it exists
-        if hasattr(self, 'window'):
-            self.window.close()
 
 if __name__ == "__main__":
     monitor = PeopleMonitor(
@@ -348,8 +307,7 @@ if __name__ == "__main__":
         email_sender='wyantethan@gmail.com',
         email_password='your_app_password',
         email_recipient='wyantethan@gmail.com',
-        min_people=2,
-        display_method='qt'
+        min_people=2
     )
     
     try:
