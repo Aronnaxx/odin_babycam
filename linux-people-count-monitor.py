@@ -217,11 +217,16 @@ class PeopleMonitor:
             
         try:
             if people_count < self.min_people:
-                # Red alert - turn all LEDs red
-                for i in range(10):  # Circuit Playground has 10 LEDs
-                    self.cp.pixels[i] = (255, 0, 0)  # Red
+                if people_count == 1:
+                    # Red alert - turn all LEDs red for 1 person
+                    for i in range(10):
+                        self.cp.pixels[i] = (255, 0, 0)  # Red
+                else:
+                    # White - turn all LEDs white for 0 people
+                    for i in range(10):
+                        self.cp.pixels[i] = (255, 255, 255)  # White
             else:
-                # All clear - turn all LEDs green
+                # All clear - turn all LEDs green for 2 or more
                 for i in range(10):
                     self.cp.pixels[i] = (0, 255, 0)  # Green
         except Exception as e:
@@ -325,6 +330,13 @@ class PeopleMonitor:
         if hasattr(self, 'cap') and self.cap is not None:
             self.cap.release()
         self.stop_video_recording()
+        # Turn off all LEDs before closing
+        if self.cp is not None:
+            try:
+                for i in range(10):
+                    self.cp.pixels[i] = (0, 0, 0)  # Turn off all LEDs
+            except Exception as e:
+                self.logger.error(f"Failed to turn off LEDs during cleanup: {e}")
         # Close Qt window if it exists
         if hasattr(self, 'window'):
             self.window.close()
