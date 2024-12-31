@@ -1,48 +1,33 @@
+import RPi.GPIO as GPIO
 import time
-import usb.core
-import usb.util
-import serial
-import serial.tools.list_ports
 
-def find_circuit_playground():
-    """Find the Circuit Playground Express device."""
-    for port in serial.tools.list_ports.comports():
-        if "Circuit Playground" in port.description:
-            return serial.Serial(port.device, 115200, timeout=1)
-    return None
+# Use BCM GPIO references instead of physical pin numbers
+GPIO.setmode(GPIO.BCM)
+
+# Define the GPIO pin we'll use (GPIO18 - pin 12)
+LED_PIN = 18
+
+# Set up the GPIO pin as output
+GPIO.setup(LED_PIN, GPIO.OUT)
 
 def main():
-    print("Looking for Circuit Playground Express...")
-    ser = find_circuit_playground()
-    if not ser:
-        print("Could not find Circuit Playground Express! Is it connected via USB?")
-        return
-
-    print("Found Circuit Playground Express! Starting LED test sequence...")
+    print("Starting LED test sequence...")
     try:
         while True:
-            # Red
-            print("Setting LEDs to RED")
-            ser.write(b'R')
+            # Turn LED on
+            print("LED ON")
+            GPIO.output(LED_PIN, GPIO.HIGH)
             time.sleep(1)
             
-            # White
-            print("Setting LEDs to WHITE")
-            ser.write(b'W')
+            # Turn LED off
+            print("LED OFF")
+            GPIO.output(LED_PIN, GPIO.LOW)
             time.sleep(1)
-            
-            # Green
-            print("Setting LEDs to GREEN")
-            ser.write(b'G')
-            time.sleep(1)
-            
-            print("Test sequence complete! Starting over...\n")
             
     except KeyboardInterrupt:
-        # Turn off all LEDs when exiting
-        print("\nTurning off LEDs...")
-        ser.write(b'O')  # O for Off
-        ser.close()
+        print("\nCleaning up...")
+    finally:
+        GPIO.cleanup()  # Clean up GPIO on exit
 
 if __name__ == "__main__":
     main() 

@@ -11,14 +11,17 @@ from datetime import datetime
 import logging
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
-import board
-import neopixel
-from adafruit_circuitplayground import cp
+import RPi.GPIO as GPIO
 
 # ANSI escape codes for colors
 GREEN = '\033[92m'
 RED = '\033[91m'
 RESET = '\033[0m'
+
+# GPIO setup
+LED_PIN = 18  # GPIO18 (pin 12)
+GPIO.setmode(GPIO.BCM)
+GPIO.setup(LED_PIN, GPIO.OUT)
 
 def find_available_camera():
     """Try to find an available camera by testing indices."""
@@ -75,14 +78,6 @@ class PeopleMonitor:
         # Video recording setup
         self.video_writer = None
         self.current_video_path = None
-            
-        # Circuit Playground Express setup
-        try:
-            self.cp = cp
-            self.logger.info("Successfully connected to Circuit Playground Express")
-        except Exception as e:
-            self.logger.error(f"Failed to initialize Circuit Playground Express: {e}")
-            self.cp = None
 
     def send_slack_alert(self, message):
         try:
@@ -172,27 +167,21 @@ class PeopleMonitor:
             sys.stdout.flush()
             return True
 
-    def update_leds(self, people_count):
-        """Update the LEDs based on the number of people detected."""
-        if self.cp is None:
-            return
-            
+    def update_led(self, people_count):
+        """Update the LED based on the number of people detected."""
         try:
             if people_count < self.min_people:
                 if people_count == 1:
-                    # Red alert - turn all LEDs red for 1 person
-                    for i in range(10):
-                        self.cp.pixels[i] = (255, 0, 0)  # Red
+                    # LED OFF for exactly one person
+                    GPIO.output(LED_PIN, GPIO.LOW)
                 else:
-                    # White - turn all LEDs white for 0 people
-                    for i in range(10):
-                        self.cp.pixels[i] = (255, 255, 255)  # White
+                    # LED ON (white) for zero people
+                    GPIO.output(LED_PIN, GPIO.HIGH)
             else:
-                # All clear - turn all LEDs green for 2 or more
-                for i in range(10):
-                    self.cp.pixels[i] = (0, 255, 0)  # Green
+                # LED ON (green) for two or more people
+                GPIO.output(LED_PIN, GPIO.HIGH)
         except Exception as e:
-            self.logger.error(f"Failed to update LEDs: {e}")
+            self.logger.error(f"Failed to update LED: {e}")
 
     def detect_and_display_people(self):
         try:
@@ -222,8 +211,8 @@ class PeopleMonitor:
                 people = [box for box in results[0].boxes if int(box.cls) == 0]
                 people_count = len(people)
                 
-                # Update LEDs based on people count
-                self.update_leds(people_count)
+                # Update LED based on people count
+                self.update_led(people_count)
                 
                 # Draw bounding boxes
                 frame_with_boxes = frame.copy()
@@ -292,25 +281,21 @@ class PeopleMonitor:
         if hasattr(self, 'cap') and self.cap is not None:
             self.cap.release()
         self.stop_video_recording()
-        # Turn off all LEDs before closing
-        if self.cp is not None:
-            try:
-                for i in range(10):
-                    self.cp.pixels[i] = (0, 0, 0)  # Turn off all LEDs
-            except Exception as e:
-                self.logger.error(f"Failed to turn off LEDs during cleanup: {e}")
+        # Turn off LED before closing
+        GPIO.output(LED_PIN, GPIO.LOW)
+        GPIO.cleanup()
 
 if __name__ == "__main__":
-    monitor = PeopleMonitor(
-        slack_token='xoxb-your-slack-token',
-        slack_channel='#team-alerts',
-        email_sender='wyantethan@gmail.com',
-        email_password='your_app_password',
-        email_recipient='wyantethan@gmail.com',
-        min_people=2
-    )
-    
     try:
+        monitor = PeopleMonitor(
+            slack_token='xoxb-your-slack-token',
+            slack_channel='#team-alerts',
+            email_sender='wyantethan@gmail.com',
+            email_password='your_app_password',
+            email_recipient='wyantethan@gmail.com',
+            min_people=2
+        )
+        
         monitor.start_monitoring()
         print("Press Ctrl+C to quit")
         while monitor.monitoring:
@@ -318,3 +303,6 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("\nStopping monitoring...")
         monitor.stop_monitoring()
+    finally:
+        # Ensure GPIO is cleaned up
+        GPIO.cleanup()
