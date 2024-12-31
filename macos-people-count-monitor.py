@@ -261,10 +261,14 @@ class PeopleMonitor:
             
         try:
             if people_count < self.min_people:
-                # Red alert - turn all LEDs red
-                self.serial_port.write(b'R')  # Send 'R' for red
+                if people_count == 1:
+                    # Red alert - turn all LEDs red for 1 person
+                    self.serial_port.write(b'R')  # Send 'R' for red
+                else:
+                    # White - turn all LEDs white for 0 people
+                    self.serial_port.write(b'W')  # Send 'W' for white
             else:
-                # All clear - turn all LEDs green
+                # All clear - turn all LEDs green for 2 or more
                 self.serial_port.write(b'G')  # Send 'G' for green
             self.serial_port.flush()
         except Exception as e:

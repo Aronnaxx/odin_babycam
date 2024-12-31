@@ -172,14 +172,15 @@ class PeopleMonitor:
         try:
             if people_count < self.min_people:
                 if people_count == 1:
-                    # LED OFF for exactly one person
-                    GPIO.output(LED_PIN, GPIO.LOW)
+                    # LED RED for exactly one person
+                    GPIO.output(LED_PIN, GPIO.HIGH)  # Turn on for RED
+                    time.sleep(0.1)  # Brief delay to show state change
                 else:
-                    # LED ON (white) for zero people
-                    GPIO.output(LED_PIN, GPIO.HIGH)
+                    # LED WHITE (on) for zero people
+                    GPIO.output(LED_PIN, GPIO.HIGH)  # Turn on for WHITE
             else:
-                # LED ON (green) for two or more people
-                GPIO.output(LED_PIN, GPIO.HIGH)
+                # LED GREEN for two or more people
+                GPIO.output(LED_PIN, GPIO.HIGH)  # Turn on for GREEN
         except Exception as e:
             self.logger.error(f"Failed to update LED: {e}")
 
