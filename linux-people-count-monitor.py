@@ -24,15 +24,63 @@ GPIO.setmode(GPIO.BCM)
 GPIO.setup(LED_PIN, GPIO.OUT)
 
 def find_available_camera():
-    """Try to find an available camera by testing indices."""
-    for i in range(10):  # Test first 10 camera indices
-        cap = cv2.VideoCapture(i)
+    """Try to find an available camera, prioritizing CSI camera if available."""
+    # First try CSI camera (Raspberry Pi camera module)
+    try:
+        # Try gstreamer pipeline for CSI camera
+        gstreamer_pipeline = (
+            "nvarguscamerasrc ! "
+            "video/x-raw(memory:NVMM), "
+            "width=1280, height=720, "
+            "format=(string)NV12, "
+            "framerate=30/1 ! "
+            "nvvidconv ! "
+            "video/x-raw, format=(string)BGRx ! "
+            "videoconvert ! "
+            "video/x-raw, format=(string)BGR ! "
+            "appsink"
+        )
+        cap = cv2.VideoCapture(gstreamer_pipeline, cv2.CAP_GSTREAMER)
         if cap.isOpened():
             ret, _ = cap.read()
-            cap.release()
             if ret:
-                return i
-    return 0  # Default to 0 if no camera found
+                logging.info("Using CSI camera")
+                return cap
+            cap.release()
+    except Exception as e:
+        logging.warning(f"CSI camera not available: {e}")
+    
+    # If CSI camera fails, try legacy CSI camera method
+    try:
+        cap = cv2.VideoCapture(0)
+        if cap.isOpened():
+            # Try to set typical CSI camera properties
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+            cap.set(cv2.CAP_PROP_FPS, 30)
+            ret, _ = cap.read()
+            if ret:
+                logging.info("Using legacy CSI camera")
+                return cap
+            cap.release()
+    except Exception as e:
+        logging.warning(f"Legacy CSI camera not available: {e}")
+
+    # Finally, try USB cameras
+    for i in range(10):  # Test first 10 camera indices
+        try:
+            cap = cv2.VideoCapture(i)
+            if cap.isOpened():
+                ret, _ = cap.read()
+                if ret:
+                    logging.info(f"Using USB camera at index {i}")
+                    return cap
+                cap.release()
+        except Exception as e:
+            logging.warning(f"Failed to open camera at index {i}: {e}")
+    
+    logging.error("No cameras found")
+    return None
 
 class PeopleMonitor:
     def __init__(self, 
@@ -185,14 +233,11 @@ class PeopleMonitor:
 
     def detect_and_display_people(self):
         try:
-            camera_index = find_available_camera()
-            self.logger.info(f"Using camera device index: {camera_index}")
-            self.cap = cv2.VideoCapture(camera_index)
-            
-            if not self.cap.isOpened():
-                self.logger.error(f"Error: Could not open camera at index {camera_index}")
+            self.cap = find_available_camera()
+            if self.cap is None:
+                self.logger.error("Error: Could not find any available cameras")
                 return
-
+            
             recording_started = False
             print("\n")  # Add initial newline for status updates
             last_alert_time = 0
