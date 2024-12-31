@@ -1,0 +1,14 @@
+[Unit]
+Description=People Monitor Service
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 /home/pi/OdinBabyCam/linux-people-count-monitor.py
+WorkingDirectory=/home/pi/OdinBabyCam
+User=root
+Group=root
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target 
