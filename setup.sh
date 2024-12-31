@@ -1,6 +1,3 @@
-# Install required packages
-sudo pip3 install RPi.GPIO opencv-python-headless ultralytics numpy torch slack-sdk
-
 # Set up autostart service
 # 1. Copy service file to systemd directory
 sudo cp people-monitor.service /etc/systemd/system/

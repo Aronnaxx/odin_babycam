@@ -3,8 +3,9 @@ Description=People Monitor Service
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/python3 /home/pi/OdinBabyCam/linux-people-count-monitor.py
-WorkingDirectory=/home/pi/OdinBabyCam
+Environment="PATH=/home/cleanroom/odin_babycam/venv/bin:$PATH"
+ExecStart=/home/cleanroom/odin_babycam/venv/bin/python /home/cleanroom/odin_babycam/linux-people-count-monitor.py
+WorkingDirectory=/home/cleanroom/odin_babycam
 User=root
 Group=root
 Restart=always
